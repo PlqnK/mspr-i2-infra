@@ -1,0 +1,7 @@
+---
+- name: 'docker_compose_restart_traefik'
+  community.docker.docker_compose:
+    project_src: '{{ compose_file_base_path }}'
+    services:
+      - 'traefik'
+    state: 'restarted'

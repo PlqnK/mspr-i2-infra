@@ -1,0 +1,84 @@
+version: '3.1'
+
+services:
+  traefik:
+    image: traefik:2.8
+    restart: unless-stopped
+    privileged: true
+    networks:
+      - traefik-external
+      - traefik-internal
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - {{ containers_storage_base_path }}/config/traefik/traefik.toml:/etc/traefik/traefik.toml
+      - {{ containers_storage_base_path }}/config/traefik/traefik-dynamic.toml:/etc/traefik/traefik-dynamic.toml
+      - {{ containers_storage_base_path }}/data/traefik/acme.json:/acme.json
+    environment:
+      TZ: '{{ timezone }}'
+    labels:
+      traefik.enable: 'true'
+      traefik.docker.network: 'traefik-internal'
+      traefik.http.routers.traefik.rule: 'Host(`traefik.{{ domain_name }}`)'
+      traefik.http.routers.traefik.entrypoints: 'websecure'
+      traefik.http.routers.traefik.service: 'api@internal'
+      traefik.http.routers.traefik.middlewares: 'set-security-headers@file, traefik-auth'
+      traefik.http.middlewares.traefik-auth.basicauth.users: '{{ traefik.api.user }}:{{ traefik.api.password | password_hash('bcrypt') | replace("$", "$$") }}'
+{% for stack in wordpress_stacks %}
+  mariadb_{{ stack.client }}:
+    image: mariadb:10
+    restart: unless-stopped
+    networks:
+      - wordpress-internal
+    expose:
+      - 3306
+    volumes:
+      - mariadb_{{ stack.client }}:/var/lib/mysql
+    environment:
+      TZ: '{{ stack.timezone }}'
+      MYSQL_RANDOM_ROOT_PASSWORD: '1'
+      MYSQL_DATABASE: 'wordpress'
+      MYSQL_USER: 'wordpress'
+      MYSQL_PASSWORD: '{{ stack.mariadb_wordpress_password }}'
+  wordpress_{{ stack.client }}:
+    image: wordpress:6
+    restart: unless-stopped
+    networks:
+      - web-egress
+      - traefik-internal
+      - wordpress-internal
+    expose:
+      - 80
+    volumes:
+      - wordpress_{{ stack.client }}:/var/www/html
+    environment:
+      TZ: '{{ stack.timezone }}'
+      WORDPRESS_DB_HOST: 'mariadb_{{ stack.client }}'
+      WORDPRESS_DB_NAME: 'wordpress'
+      WORDPRESS_DB_USER: 'wordpress'
+      WORDPRESS_DB_PASSWORD: '{{ stack.mariadb_wordpress_password }}'
+    labels:
+      traefik.enable: 'true'
+      traefik.http.routers.wordpress_{{ stack.client }}.rule: 'Host(`{{ stack.service_fqdn }}`)'
+      traefik.http.routers.wordpress_{{ stack.client }}.entrypoints: 'websecure'
+      traefik.http.routers.wordpress_{{ stack.client }}.middlewares: 'set-security-headers@file'
+      traefik.http.services.wordpress_{{ stack.client }}.loadbalancer.server.port: '80'
+{% endfor %}
+
+networks:
+  web-egress:
+    external: true
+  traefik-external:
+    external: true
+  traefik-internal:
+    external: true
+  wordpress-internal:
+    external: true
+
+volumes:
+{% for stack in wordpress_stacks %}
+  mariadb_{{ stack.client }}:
+  wordpress_{{ stack.client }}:
+{% endfor %}

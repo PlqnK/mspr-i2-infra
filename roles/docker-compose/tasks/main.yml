@@ -1,0 +1,57 @@
+---
+- name: 'Create compose file parent folder'
+  ansible.builtin.file:
+    path: '{{ compose_file_base_path }}'
+    state: 'directory'
+    owner: 'root'
+    group: 'root'
+    mode: '0755'
+
+- name: 'Create compose file from template'
+  ansible.builtin.template:
+    src: 'docker-compose.yml.j2'
+    dest: '{{ compose_file_base_path }}/docker-compose.yml'
+    owner: 'root'
+    group: 'wheel'
+    mode: '0640'
+
+- name: 'Add COMPOSE_FILE environment variable to {{ admin_user.user.name }} bash_profile'
+  ansible.builtin.lineinfile:
+    path: '/home/{{ admin_user.user.name }}/.bash_profile'
+    regexp: '^export COMPOSE_FILE='
+    line: 'export COMPOSE_FILE={{ compose_file_base_path }}/docker-compose.yml'
+
+- name: 'Create Traefik config and data folders'
+  ansible.builtin.file:
+    path: '{{ item }}'
+    state: 'directory'
+    owner: 'root'
+    group: 'root'
+    mode: '0755'
+  loop:
+    - '{{ containers_storage_base_path }}/config/traefik'
+    - '{{ containers_storage_base_path }}/data/traefik'
+
+- name: 'Template config files to containers storage'
+  ansible.builtin.template:
+    src: '{{ item.src }}'
+    dest: '{{ item.dest }}'
+  loop:
+    - src: 'traefik.toml.j2'
+      dest: '{{ containers_storage_base_path }}/config/traefik/traefik.toml'
+    - src: 'traefik-dynamic.toml.j2'
+      dest: '{{ containers_storage_base_path }}/config/traefik/traefik-dynamic.toml'
+  notify: docker_compose_restart_traefik
+
+- name: 'Create Traefik certificates storage file'
+  ansible.builtin.file:
+    path: '{{ containers_storage_base_path }}/data/traefik/acme.json'
+    state: 'touch'
+    access_time: 'preserve'
+    modification_time: 'preserve'
+    mode: '0600'
+
+- name: 'Execute docker-compose file'
+  community.docker.docker_compose:
+    project_src: '{{ compose_file_base_path }}'
+    state: 'present'
