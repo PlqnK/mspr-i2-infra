@@ -1,0 +1,94 @@
+---
+- name: 'Install base packages and ansible dependencies'
+  ansible.builtin.dnf:
+    name:
+      - 'firewalld'
+      - 'python3-firewall'
+    state: 'present'
+
+- name: 'Enable and start firewalld'
+  ansible.builtin.systemd:
+    name: 'firewalld.service'
+    enabled: true
+    state: 'started'
+
+- name: 'Accept HTTP and HTTPS incomming connection on default firewalld interface'
+  ansible.posix.firewalld:
+    service: '{{ item }}'
+    permanent: true
+    immediate: true
+    state: 'enabled'
+  loop:
+    - 'http'
+    - 'https'
+
+- name: 'Enable masquerading on default firewalld interface'
+  ansible.posix.firewalld:
+    masquerade: true
+    permanent: true
+    immediate: true
+    state: 'enabled'
+
+- name: 'Install docker, docker-compose and ansible dependencies'
+  ansible.builtin.dnf:
+    name:
+      - 'moby-engine'
+      - 'docker-compose'
+      - 'python3-docker'
+    state: 'present'
+
+- name: 'Add admin user to wheel and docker groups'
+  ansible.builtin.user:
+    name: '{{ admin_user.user.name }}'
+    groups:
+      - 'wheel'
+      - 'docker'
+    append: true
+
+- name: 'Enable and start the docker service'
+  ansible.builtin.systemd:
+    name: 'docker.service'
+    enabled: true
+    state: 'started'
+
+- name: 'Create containers data storage directories'
+  ansible.builtin.file:
+    path: '{{ containers_storage_base_path }}/{{ item }}'
+    state: 'directory'
+  loop:
+    - 'config'
+    - 'data'
+    - 'runtime'
+
+- name: 'Create external networks'
+  community.docker.docker_network:
+    name: '{{ item }}'
+  loop:
+    - 'web-egress'
+    - 'traefik-external'
+
+- name: 'Create internal networks'
+  community.docker.docker_network:
+    name: '{{ item }}'
+    internal: true
+  loop:
+    - 'traefik-internal'
+    - 'wordpress-internal'
+
+# Sometimes docker doesn't add the bridges it creates to the docker zone by itself...
+- name: 'Get docker bridges list'
+  ansible.builtin.find:
+    paths: '/sys/class/net'
+    patterns: '*br-*'
+    file_type: 'link'
+  register: docker_bridges
+
+- name: 'Add docker bridges to docker firewalld zone'
+  ansible.posix.firewalld:
+    zone: 'docker'
+    interface: '{{ item.path | basename }}'
+    permanent: true
+    immediate: true
+    state: 'enabled'
+  loop: '{{ docker_bridges.files }}'
+  notify: 'restart docker'
