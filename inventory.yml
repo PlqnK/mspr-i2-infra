@@ -1,0 +1,34 @@
+---
+all:
+  hosts:
+    docker-host:
+      ansible_host: '192.168.121.159'
+      ansible_user: 'vagrant'
+      ansible_become: true
+      ansible_ssh_private_key_file: '~/.vagrant.d/insecure_private_key'
+  vars:
+    containers_storage_base_path: '/var/containers'
+    compose_file_base_path: '/etc/containers'
+    timezone: 'Europe/Paris'
+    admin_user:
+      user:
+        name: 'vagrant'
+      email: 'admin@example.com'
+    traefik:
+      api:
+        user: 'admin'
+        password: 'supersecretpassword'
+    domain_name: 'localhost.localdomain'
+    wordpress_stacks:
+      - client: 'geronimo'
+        timezone: 'Europe/Paris'
+        service_fqdn: 'geronimo.localhost.localdomain'
+        mariadb_wordpress_password: 'mariadb_wordpress_password'
+      - client: 'client2'
+        timezone: 'Europe/Paris'
+        service_fqdn: 'client2.localhost.localdomain'
+        mariadb_wordpress_password: 'mariadb_wordpress_password'
+      - client: 'client3'
+        timezone: 'Europe/Paris'
+        service_fqdn: 'client3.localhost.localdomain'
+        mariadb_wordpress_password: 'mariadb_wordpress_password'

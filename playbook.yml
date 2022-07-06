@@ -1,0 +1,10 @@
+---
+- name: 'Setup docker on host'
+  hosts: 'docker-host'
+  roles:
+    - 'docker-setup'
+
+- name: 'Deploy Wordpress stacks'
+  hosts: 'docker-host'
+  roles:
+    - 'docker-compose'
